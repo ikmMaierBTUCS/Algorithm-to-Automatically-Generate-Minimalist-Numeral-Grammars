@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Sep 12 19:05:52 2023
+Created on Wed Sep 13 16:14:28 2023
 
 @author: ikm
 """
@@ -246,6 +246,28 @@ class SCFunction:
                 #print(build_base)
                 #print([component[0].number for component in mergee.inputrange]+[1])
                 raise BaseException('Mergee must have a different mapping')
+            '''
+            build_base=[[component[0].number for component in mergee.inputrange]+[1]]
+            build_image=[mergee.mapping[-1]]
+            #print(len(self.inputrange))
+            base_complete = False
+            for root_inputx in cartesian_product(self.inputrange):
+                for final_inputx in cartesian_product([entr.all_outputs() for entr in root_inputx]):
+                    #print(build_base)
+                    #print([component.number for component in final_inputx]+[1])
+                    #if not inputx in span(build_base): # matrank(buildbase+inputx)=len(Buildbase)+1
+                    if np.linalg.matrix_rank(np.array(build_base+[[component.mapping[-1] for component in final_inputx]+[1]], dtype=np.float64),tol=None)==len(build_base)+1:
+                        #print(str(self.insert(inputx).number)+' is linear independent')
+                        build_base=build_base+[[component.mapping[-1] for  component in final_inputx]+[1]]
+                        #print([self.insert(inputx).number])
+                        build_image=build_image+[self.insert(final_inputx).mapping[-1]]
+                    if len(build_base)==self.dimension()+1:
+                        #print('base complete')
+                        base_complete = True
+                        break
+                if base_complete:
+                    break
+            '''
             #print('calculation')
             #print(build_base)
             #print(build_image)
@@ -434,7 +456,21 @@ def delatinized(string):
             return string
     else:
         return string
-    
+#def delatinized(string):
+ #   ad = AlphabetDetector()
+  #  if not ad.is_latin(string):
+   #     if ad.is_latin(string[0]):
+     #       for point in range(len(string)+1):
+      #          if not ad.is_latin(string[:point]):
+       #             return string[point-1:]        
+        #elif ad.is_latin(string[-1]):
+         #   for point in reversed(range(len(string)+1)):
+          #      if not ad.is_latin(string[point:]):
+           #         return string[:point+1]
+        #else:
+         #   return string
+    #else:
+        #return string
 def create_lexicon(language):
     LEX=[]
     try:
@@ -819,7 +855,7 @@ def learn_language(language):
             #1 parse new word
             #print('What means '+str(voc.number)+'?')
             #print('Supervisor: '+voc.word)#+' means '+str(voc.number))
-            parse = advanced_parse(voc.number, voc.word, learnerlex, False, True)
+            parse = advanced_parse(voc.number, voc.word, learnerlex, False, False)
             # Understood?
             understood = False
             for entry in learnerlex:
@@ -828,7 +864,7 @@ def learn_language(language):
                     try:
                         learned = entry.merge(parse)
                         learnerlex.remove(entry)
-                        learned.present()
+                        #learned.present()
                         #print(str(entry.actual_dimension()) + ' < ' + str(learned.actual_dimension()) + ' ?')
                         if entry.actual_dimension() < learned.actual_dimension():
                             #print('Attempting reinforcement')
@@ -836,12 +872,11 @@ def learn_language(language):
                         understood = True
                         break
                     except:
-                        print('Not related to '+entry.root)
+                        #print('Not related to '+entry.root)
                         pass
             if not understood:
                 #2b No, just remembering
                 learned = parse
-            #learned.present()
             learnerlex += [learned]
     #reorganize all inputranges so that they only contain scfunctions, no vocabulary
     new_learnerlex = []
@@ -870,7 +905,7 @@ def learn_language(language):
     for entry in learnerlex:
         entry.present()
     print('')
-    
+
 def scfbigger(x,y):
     '''
     return 1/0/-1 if x is bigger/equal/smaller than y
@@ -943,14 +978,14 @@ def scflist2cfg(scflist):
             CFGword += subwords[j] + NTs[j]
         CFGword += subwords[-1]
         #make rules
-        CFG += [('S',CFGword,cat)]
+        CFG += [('S',CFGword,cat,scf.mapping)]
         #print(CFG[-1])
         for k in range(len(inputsets)):
             #print('is '+scf.root+' in this inputset?')
             for entr in inputsets[k]:
                 #entr.present()
                 if entr.root == scf.root and entr.mapping == scf.mapping:
-                    CFG += [(NTname[k],CFGword,cat)]
+                    CFG += [(NTname[k],CFGword,cat,scf.mapping)]
                     #print(CFG[-1])
                     break
         #print(CFG)
@@ -969,7 +1004,7 @@ def cfg2mg(CFG):
     '''
     #for rule in CFG:
         #print(rule)
-    CFG += [('START', 'S', 'cFin')]
+    CFG += [('START', 'S', 'cFin',[1,0])]
     N = set([rule[0] for rule in CFG]) # Set of all NTs
     F = [] # Free NTs
     R = [] # Restricted NTs
@@ -995,12 +1030,12 @@ def cfg2mg(CFG):
             #print(secondary_categories)
             for ind in range(len(secondary_categories)):
                 category_order.relations.add((main_category,secondary_categories[ind]))
-                updated_NT_rules += [(NT, NT+str(ind), main_category)]
+                updated_NT_rules += [(NT, NT+str(ind), main_category, [1,0])]
                 target_category[NT+str(ind)] = secondary_categories[ind]
                 aux_NTs += [NT+str(ind)]
                 for rule in NT_rules:
                     if rule[2] == secondary_categories[ind]:
-                        updated_NT_rules += [(NT+str(ind), rule[1], secondary_categories[ind])]
+                        updated_NT_rules += [(NT+str(ind), rule[1], secondary_categories[ind], rule[3])]
             #print('Updated rules:')
             #print(updated_NT_rules)
             CFG = [rule for rule in CFG if rule not in NT_rules] + updated_NT_rules
@@ -1055,7 +1090,7 @@ def cfg2mg(CFG):
                 summarized_tf_CFG[i][0] += [rule[0]]
         if not same_rule_found:
             # otherwise: add new rule
-            summarized_tf_CFG += [[[rule[0]],rule[1],rule[2]]]
+            summarized_tf_CFG += [[[rule[0]],rule[1],rule[2],rule[3]]]
     #print('summarized transformed CFG:')
     #for rule in summarized_tf_CFG:
         #print(rule)
@@ -1072,20 +1107,36 @@ def cfg2mg(CFG):
                 chars = chars[:char - 1] + [chars[char - 1] + chars[char]] + chars[char + 1:]
         #print('characters:')
         #print(chars)
+        # produce semantic string
+        if len(rule[3]) == 1:
+            sem = ', '+str(rule[3][-1])
+        elif len(rule[3]) == 2:
+            if rule[3] == [1,0]:
+                sem = ', '+"\u03BB"+"x.x"
+            elif rule[3][-1] == 0:
+                sem = ', '+"\u03BB"+"x.'"+str(rule[3][0])+"X'(x)"
+            else:
+                sem = ', '+"\u03BB"+"x.'"+str(rule[3][0])+"X+"+str(rule[3][-1])+"'(x)"
+        elif len(rule[3]) == 3:
+            if rule[3][-1] == 0:
+                sem = ', '+"\u03BB"+"x"+"\u03BB"+"y.'"+str(rule[3][1])+"X+"+str(rule[3][0])+"Y'(x,y)"
+            else:
+                sem = ', '+"\u03BB"+"x"+"\u03BB"+"y.'"+str(rule[3][1])+"X+"+str(rule[3][0])+"Y+"+str(rule[3][-1])+"'(x,y)"
+        # compose full string
         if chars == []:
-            item =('[ :: ' + rule[2] +']', rule[0], rule[2])
+            item =('[ :: ' + rule[2] +']', rule[0], rule[2],rule[3],sem)
         elif chars[0] not in N and chars[-1] not in N: # if word
             #print('no NTs')
-            item =('[' + ''.join(chars) + ' :: ' + rule[2] +']', rule[0], rule[2])
+            item =('[' + ''.join(chars) + ' :: ' + rule[2] +']', rule[0], rule[2],rule[3],sem)
         elif chars[0] in R: # if Rword
             #print('left restricted')
-            item = ('[' + ''.join(chars[1:]) + ' :: ' + '=' + target_category[chars[0]] + ', +' + chars[0] + ', ' + rule[2] +']', rule[0], rule[2])
+            item = ('[' + ''.join(chars[1:]) + ' :: ' + '=' + target_category[chars[0]] + ', +' + chars[0] + ', ' + rule[2] +']', rule[0], rule[2],rule[3],sem)
         elif (chars[0] not in N or len(chars) == 1) and chars[-1] in F: # if wordF
             #print('right free')
-            item =('[' + ''.join(chars[:-1]) + ' :: ' + '=' + target_category[chars[-1]] + ', ' + rule[2] +']', rule[0], rule[2])
+            item =('[' + ''.join(chars[:-1]) + ' :: ' + '=' + target_category[chars[-1]] + ', ' + rule[2] +']', rule[0], rule[2],rule[3],sem)
         elif chars[0] in F and chars[-1] in F: # if FwordF
             #print('2-handed free')
-            item =('[' + ''.join(chars[1:-1]) + ' :: ' + '=' + target_category[chars[-1]] + ', ' + '=' + target_category[chars[0]] + ', ' + rule[2] +']', rule[0], rule[2])
+            item =('[' + ''.join(chars[1:-1]) + ' :: ' + '=' + target_category[chars[-1]] + ', ' + '=' + target_category[chars[0]] + ', ' + rule[2] +']', rule[0], rule[2],rule[3],sem)
         #print('item:')
         #print(item)
         MG_without_licensors += [item]
@@ -1111,7 +1162,7 @@ def cfg2mg(CFG):
         licensors = ['-'+NT for NT in item[1] if NT in R]
         #print('licensors of ' + item[0] + ':')
         #print(licensors)
-        new_item = (item[0][:-1] + ''.join([', ' + licensor for licensor in licensors]) + ']', licensors, item[2])
+        new_item = (item[0][:-1] + ''.join([', ' + licensor for licensor in licensors]) + ']'+item[4], licensors, item[2])
         MG += [new_item]
     
     all_licensors = set()
@@ -1124,14 +1175,14 @@ def cfg2mg(CFG):
                 all_licensor_chains.add((tuple(item[1][licensor:]),item[2]))
     
     for licensor in all_licensors:
-        remove_shaper = ['[ :: =' + licensor[1] + ', +' + licensor[0][1:] + ', ' + licensor[1] + ']']
+        remove_shaper = ['[ :: =' + licensor[1] + ', +' + licensor[0][1:] + ', ' + licensor[1] + ']'+', '+"\u03BB"+"x.x"]
         #print(remove_shaper)
         MG += [remove_shaper]
         
     for chain in all_licensor_chains:
         #print('chain:')
         #print(chain)
-        select_shaper = ['[ :: =' + chain[1] + ''.join([', +' + licensor[1:] for licensor in chain[0]]) + ', ' + chain[1] + ', ' +chain[0][0] + ']']
+        select_shaper = ['[ :: =' + chain[1] + ''.join([', +' + licensor[1:] for licensor in chain[0]]) + ', ' + chain[1] + ', ' +chain[0][0] + ']'', '+"\u03BB"+"x.x"]
         #print(select_shaper)
         MG += [select_shaper]
         
@@ -1155,6 +1206,7 @@ def decompose_rule(rule,R,F,N,target_category):
     '''
     symbol = rule[0]
     string = rule[1]
+    mapping = rule[3]
     if type(string) == str:
         string = list(string)
         for char in reversed(range(len(string))):
@@ -1177,7 +1229,13 @@ def decompose_rule(rule,R,F,N,target_category):
             N.add(aux_NT)
             F += [aux_NT]
             target_category[aux_NT] = aux_cat
-            return decompose_rule([symbol,string[:spot]+[aux_NT],categ],R,F,N,target_category) + decompose_rule([aux_NT,string[spot:],aux_cat],R,F,N,target_category)
+            if string[0] in N:
+                left_mapping = [mapping[0],1,mapping[-1]]
+                right_mapping = mapping[1:-1]+[0]
+            else:
+                left_mapping = [1,mapping[-1]]
+                right_mapping = mapping[0:-1]+[0]
+            return decompose_rule([symbol,string[:spot]+[aux_NT],categ,left_mapping],R,F,N,target_category) + decompose_rule([aux_NT,string[spot:],aux_cat,right_mapping],R,F,N,target_category)
     if len(string) > 1 and string[0] in R and string[-1] in R:
         #print('2-handed restricted')
         F += [contr(string[0])]
@@ -1186,28 +1244,28 @@ def decompose_rule(rule,R,F,N,target_category):
         F += [contr(string[-1])]
         N.add(contr(string[-1]))
         target_category[contr(string[-1])] = categ + string[-1]
-        return [[symbol,contr(string[0])+''.join(string[1:-1])+contr(string[-1]),categ],[contr(string[0]),string[0],categ + string[0]],[contr(string[-1]),string[-1],categ + string[-1]]]
+        return [[symbol,contr(string[0])+''.join(string[1:-1])+contr(string[-1]),categ,mapping],[contr(string[0]),string[0],categ + string[0],[1,0]],[contr(string[-1]),string[-1],categ + string[-1],[1,0]]]
     elif len(string) > 1 and string[-1] in R:
         #print('right restricted')
         F += [contr(string[-1])]
         N.add(contr(string[-1]))
         target_category[contr(string[-1])] = categ + string[-1]
-        return [[symbol,''.join(string[:-1])+contr(string[-1]),categ],[contr(string[-1]),string[-1],categ + string[-1]]]
+        return [[symbol,''.join(string[:-1])+contr(string[-1]),categ,mapping],[contr(string[-1]),string[-1],categ + string[-1],[1,0]]]
     elif len(string) > 1 and string[0] in R and string[-1] in F:
         #print('right free, left restricted')
         F += [contr(string[0])]
         N.add(contr(string[0]))
         target_category[contr(string[0])] = categ + string[0]
-        return [[symbol,contr(string[0])+''.join(string[1:]),categ],[contr(string[0]),string[0],categ + string[0]]]
+        return [[symbol,contr(string[0])+''.join(string[1:]),categ,mapping],[contr(string[0]),string[0],categ + string[0],[1,0]]]
     elif len(string) > 1 and string[0] in F and string[-1] not in N:
         #print('left free only')
         F += ['O']
         N.add('O')
         target_category['O'] = 'cnix'
-        return [[symbol,''.join(string)+'O',categ],['O','','cnix']]
+        return [[symbol,''.join(string)+'O',categ,mapping[:-1]+[1]+[mapping[-1]]],['O','','cnix',[0]]]
     else:
         #print('No more decomposing needed')
-        return [[rule[0],''.join(rule[1]),rule[2]]]
+        return [[rule[0],''.join(rule[1]),rule[2],mapping]]
     
 def free(NT,CFG):
     NT_rules = [NT_rule for NT_rule in CFG if NT_rule[0] == NT]
@@ -1238,19 +1296,19 @@ def unify_target_category(NT,CFG,target_category,category_order):
     targetted_categories = [rule[2] for rule in NT_rules]
     if len(targetted_categories) > 1:
         main_category = category_order.maximum(targetted_categories)
-        print('main target category of '+NT+' is '+main_category)
+        #print('main target category of '+NT+' is '+main_category)
         target_category[NT] = main_category
         updated_NT_rules = [rule for rule in NT_rules if rule[2] == main_category]
         secondary_categories = list(set(targetted_categories) - set([main_category])) 
-        print('secondary categries:')
-        print(secondary_categories)
+        #print('secondary categries:')
+        #print(secondary_categories)
         for ind in range(len(secondary_categories)):
             updated_NT_rules += [(NT, NT+str(ind), main_category)]
             for rule in NT_rules:
                 if rule[2] == secondary_categories[ind]:
                     updated_NT_rules += [(NT+str(ind), rule[1], secondary_categories[ind])]
-        print('New rules:')
-        print(updated_NT_rules)
+        #print('New rules:')
+        #print(updated_NT_rules)
         copy_CFG = [rule for rule in copy_CFG if rule not in NT_rules] + updated_NT_rules
     else:
         target_category[NT] = targetted_categories[0]
@@ -1356,3 +1414,19 @@ def numberset2MG(language):
     #print('')
     #print('Create MG:')
     cfg2mg(cfg)
+
+langnumb=pd.read_csv(r'C:\Users\ikm\OneDrive\Desktop\NumeralParsingPerformance\Languages&NumbersData\Numeral.csv', encoding = "utf_16", sep = '\t')
+package_languagesandnumbers=set([langnumb.iloc[i,0] for i in range(len(langnumb))])
+#print(package_languagesandnumbers)
+package_languagesandnumbers.remove('Malecite-Passamaquoddy')
+package_languagesandnumbers.remove('Language')
+package_num2words=['fr','fi','fr_CH','fr_BE','fr_DZ','he','id','it','ja','kn','ko','lt','lv','no','pl','pt','pt_BR','sl','sr','ro','ru','tr','th','vi','nl','uk','es_CO','es','es_VE','cz','de','ar','dk','en_GB','en_IN']
+
+for language in list(package_languagesandnumbers)+package_num2words:
+    try:
+        if language not in ['Tunica','Makhuwa','Yupik','Ingush','Adyghe','Susu','Haida','Kiliwa','Tongan-Telephone-Style','Nyungwe','Kutenai','Lezgian','Choapan-Zapotec','Cherokee']:
+            numberset2MG(language)
+    except:
+        print('Learning '+language+' failed')
+    print('')
+    print('')
